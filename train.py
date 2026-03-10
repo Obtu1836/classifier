@@ -1,5 +1,6 @@
 import Net
 import torch as th
+import wandb
 from torch import nn
 from torch.nn import Module
 from utils import cfg
@@ -9,6 +10,10 @@ from torch.optim import Adam, SGD, Optimizer
 from utils.process import MakeLoader, train_forms, val_forms
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, LRScheduler
 
+# load_dotenv()
+# wandb_key=os.getenv('WANDB_API_KEY')
+
+# wandb.login(key=wandb_key)
 
 class AnimalDataLoader:
 
@@ -51,7 +56,7 @@ class Factory:
     @staticmethod
     def create_model(model_cfg) -> Module:
         model_cls = getattr(Net, model_cfg['name'])
-        return model_cls(model_cfg['num_classes'])
+        return model_cls(num_classes=model_cfg['num_classes'])
     
     @staticmethod
     def createa_criterion(weight,cfg_train):
@@ -70,8 +75,12 @@ class Trainer:
         self.lr_sche: LRScheduler = lr_sche
         self.criterion = criterion
         self.device = device
+        wandb.init(project='animals classifier')
+        wandb.config={**cfg['train']}
 
-    def train_epoch(self, loader):
+        wandb.watch(self.model,log='all')
+
+    def _train_epoch(self, loader):
 
         self.model.train()
         total_loss, total_num = 0.0, 0.0
@@ -92,34 +101,64 @@ class Trainer:
         avg_loss = total_loss/samples_length
         avg_acc = total_num/samples_length
 
+        wandb.log({'train_loss':avg_loss,'train_acc':avg_acc})
+
         print(f"{"average_loss":<15}: {avg_loss:.4f}")
         print(f"{"average_acc":<15}: {avg_acc:.4f}")
 
     @th.no_grad()
-    def evaluate_epoch(self,model:Module,val_load,criterion):
+    def _evaluate_epoch(self,model:Module,val_load,criterion,idx):
         model.eval()
         total_loss,total_num=0.0,0.0
         samples_length=len(val_load.dataset)
+        example_imgs=[]
+
+        mean=th.tensor(cfg['preprocessing']['normalize']['mean'])[:,None,None].to(self.device)
+        std=th.tensor(cfg['preprocessing']['normalize']['std'])[:,None,None].to(self.device)
         for tensor,lable in track(val_load,description='evaluating...'):
             tensor,label=tensor.to(self.device),lable.to(self.device)
             output=model(tensor)
             pred=th.argmax(output,dim=1)
+            
+            mis_ind=(pred!=label).nonzero().ravel()
+            mis_pred=pred[mis_ind]
+            mis_label=label[mis_ind]
+            mis_tensor=tensor[mis_ind]
+            
             total_num+=(pred==label).sum().item()
             loss=criterion(output,label)
             total_loss+=loss.item()*tensor.size(0)
+            
+            for i in range(len(mis_pred)):
+                if len(example_imgs) >= 108:
+                    break
+                ori_tensor=mis_tensor[i]*std+mean
+                ori_tensor=ori_tensor.clamp(0,1)
+                example_imgs.append(wandb.Image(ori_tensor,
+                                                   caption=f'pred:{idx[mis_pred[i].item()]} true:{idx[mis_label[i].item()]}'))
+
         
         avg_loss=total_loss/samples_length
         avg_acc=total_num/samples_length
 
+        wandb.log({'val_loss':avg_loss,'val_acc':avg_acc,'mis_img':example_imgs})
         print(f"{"average_loss":<15}: {avg_loss:.4f}")
         print(f"{"average_acc":<15}: {avg_acc:.4f}")
 
-    def fit(self, train_loader, val_loader,epochs):
+    
+
+
+
+
+
+
+
+    def fit(self, train_loader, val_loader,epochs,idx):
 
         for epoch in range(epochs):
             print(f"第{epoch+1}/{epochs}轮训练...")
-            self.train_epoch(train_loader)
-            self.evaluate_epoch(self.model,val_loader,self.criterion)
+            self._train_epoch(train_loader)
+            self._evaluate_epoch(self.model,val_loader,self.criterion,idx)
             self.lr_sche.step()
             if self.device=='mps':
                 th.mps.empty_cache()
@@ -137,11 +176,11 @@ def main():
     model = Factory.create_model(cfg['model'])
     optimizer = Factory.create_optimizer(model.parameters(), cfg['train'])
     criterion=Factory.createa_criterion(loss_weight,cfg['train'])
-
     lr_sche = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+    
     device = cfg['train']['device']
     trainer = Trainer(model, optimizer, criterion, lr_sche, device)
-    trainer.fit(train_loader, val_loader,cfg['train']['epochs'])
+    trainer.fit(train_loader, val_loader,cfg['train']['epochs'],idx)
 
 
 if __name__ == '__main__':

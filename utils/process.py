@@ -42,6 +42,7 @@ class MakeLoader:
     def make_loader(self, sampling_weight=False,loss_weight=False, **kwargs):
         dataset = self.make_dataset()
         class_idx = dataset.class_to_idx
+        class_idx={k:v for v,k in class_idx.items()}
 
         if loss_weight:
             targets = np.array(dataset.targets)
@@ -84,8 +85,9 @@ if __name__ == '__main__':
     path=cfg['paths']
 
     loader=MakeLoader(path['train_dir'],trans=val_forms)
-    a,b,c=loader.make_loader(cfg['dataset']['sampling_weigh'],cfg['dataset']['loss_weight']**cfg['dataset']['dataloader'])
+    a,b,c=loader.make_loader(cfg['dataset']['sampling_weight'],cfg['dataset']['loss_weight'],**cfg['dataset']['dataloader'])
     # dataset=loader.make_dataset()
+    print(b)
 
 
 

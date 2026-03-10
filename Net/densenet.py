@@ -68,7 +68,7 @@ class DenseTransition(nn.Sequential):
         self.add_module('avgpool',nn.AvgPool2d(2,2))
 
 class DenseNet(nn.Module):
-    def __init__(self,num_blocks,grow=32,bn=4,drop=0,num_class=1000):
+    def __init__(self,num_blocks=[6,12,24,16],grow=32,bn=4,drop=0,num_classes=1000):
         super().__init__()
 
         init_dims=64 #layer1 和resnet一样
@@ -98,7 +98,7 @@ class DenseNet(nn.Module):
         self.layer3.add_module('avgpool',nn.AdaptiveAvgPool2d((1,1)))
         self.layer3.add_module('flatten',nn.Flatten(1))
 
-        self.fc=nn.Linear(init_dims,num_class)
+        self.fc=nn.Linear(init_dims,num_classes)
     
     def forward(self,x):
 
