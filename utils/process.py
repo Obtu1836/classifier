@@ -42,7 +42,7 @@ class MakeLoader:
     def make_loader(self, sampling_weight=False,loss_weight=False, **kwargs):
         dataset = self.make_dataset()
         class_idx = dataset.class_to_idx
-        class_idx={k:v for v,k in class_idx.items()}
+        class_idx={k:v for v,k in class_idx.items()} # 数字 ：label
 
         if loss_weight:
             targets = np.array(dataset.targets)

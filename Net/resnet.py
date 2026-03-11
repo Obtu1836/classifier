@@ -21,8 +21,8 @@ class Residual(nn.Module):
         return f.relu(out)
 
 
-class Resnet(nn.Module):
-    def __init__(self,num_class,layer_nums=[3,4,6,4]):
+class ResNet(nn.Module):
+    def __init__(self,num_classes,layer_nums=[3,4,6,4]):
         super().__init__()
 
         init_chanle = 64
@@ -44,7 +44,7 @@ class Resnet(nn.Module):
 
         self.layers = nn.Sequential(*layers)
         self.drop_out=nn.Dropout(0.3)
-        self.fc = nn.Linear(init_chanle, num_class)
+        self.fc = nn.Linear(init_chanle, num_classes)
 
         for m in self.modules():
             if isinstance(m,nn.Conv2d):
@@ -83,7 +83,7 @@ class Resnet(nn.Module):
 #blocks [3,4,6,3] resnet34
 if __name__ == '__main__':
     
-    net=Resnet(10)
+    net=ResNet(10)
     
 
 
