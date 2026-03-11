@@ -1,6 +1,7 @@
 import Net
 import torch as th
 import wandb
+from pathlib import Path
 from torch import nn
 from torch.nn import Module
 from utils import cfg
@@ -9,11 +10,6 @@ from rich.progress import track
 from torch.optim import Adam, SGD, Optimizer
 from utils.process import MakeLoader, train_forms, val_forms
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, LRScheduler
-
-# load_dotenv()
-# wandb_key=os.getenv('WANDB_API_KEY')
-
-# wandb.login(key=wandb_key)
 
 class AnimalDataLoader:
 
@@ -51,7 +47,7 @@ class Factory:
 
         if name == 'sgd':
             return SGD(net_params, lr, momentum=0.9, weight_decay=1e-4)
-        return Adam(net_params, lr, (0.9, 0.99))
+        return Adam(net_params, lr, (0.9, 0.99),weight_decay=5e-4)
 
     @staticmethod
     def create_model(model_cfg) -> Module:
@@ -63,22 +59,22 @@ class Factory:
         device=cfg_train['device']
         if weight is not None:
             weight=th.from_numpy(weight).float().to(device)
-            return nn.CrossEntropyLoss(weight)
-        return nn.CrossEntropyLoss()
+            return nn.CrossEntropyLoss(weight,label_smoothing=0.1)
+        return nn.CrossEntropyLoss(label_smoothing=0.1)
 
 
 class Trainer:
     def __init__(self, model, optimizer, criterion, lr_sche, device='cpu'):
 
-        self.model = model.to(device)
+        self.model:Module = model.to(device)
         self.optimizer: Optimizer = optimizer
         self.lr_sche: LRScheduler = lr_sche
         self.criterion = criterion
         self.device = device
+        self.save_path=Path(cfg['paths']['checkpoint_dir'])
         wandb.init(project='animals classifier')
         wandb.config={**cfg['train']}
 
-        wandb.watch(self.model,log='all')
 
     def _train_epoch(self, loader):
 
@@ -101,10 +97,7 @@ class Trainer:
         avg_loss = total_loss/samples_length
         avg_acc = total_num/samples_length
 
-        wandb.log({'train_loss':avg_loss,'train_acc':avg_acc})
-
-        print(f"{"average_loss":<15}: {avg_loss:.4f}")
-        print(f"{"average_acc":<15}: {avg_acc:.4f}")
+        return avg_loss,avg_acc     
 
     @th.no_grad()
     def _evaluate_epoch(self,model:Module,val_load,criterion,idx):
@@ -141,29 +134,64 @@ class Trainer:
         avg_loss=total_loss/samples_length
         avg_acc=total_num/samples_length
 
-        wandb.log({'val_loss':avg_loss,'val_acc':avg_acc,'mis_img':example_imgs})
-        print(f"{"average_loss":<15}: {avg_loss:.4f}")
-        print(f"{"average_acc":<15}: {avg_acc:.4f}")
+        return avg_loss,avg_acc,example_imgs
 
-    
+    def fit(self, train_loader, val_loader, epochs, idx):
 
+        start_epoch, init_acc = self.load_model()
+        
+        if not self.save_path.exists():
+            self.save_path.mkdir()
 
-
-
-
-
-
-    def fit(self, train_loader, val_loader,epochs,idx):
-
-        for epoch in range(epochs):
+        # range(start_epoch, epochs) 确保从断点处继续
+        for epoch in range(start_epoch, epochs):
             print(f"第{epoch+1}/{epochs}轮训练...")
-            self._train_epoch(train_loader)
-            self._evaluate_epoch(self.model,val_loader,self.criterion,idx)
+            train_loss,train_acc=self._train_epoch(train_loader)
+            print(f"{"train_loss":<15}: {train_loss:.4f}")
+            print(f"{"train_acc":<15}: {train_acc:.4f}")
+            wandb.log({'train_loss':train_loss,'train_acc':train_acc},step=epoch)
+
+            val_loss,val_acc,wrong_imgs=self._evaluate_epoch(self.model,val_loader,self.criterion,idx)
+            print(f"{"val_loss":<15}: {val_loss:.4f}")
+            print(f"{"val_acc":<15}: {val_acc:.4f}")
+            wandb.log({'val_loss':val_loss,'val_acc':val_acc,'mis_img':wrong_imgs},step=epoch)
+
+            init_acc=self.save_model(init_acc,val_acc,epoch)
+
             self.lr_sche.step()
             if self.device=='mps':
                 th.mps.empty_cache()
             elif self.device =='cuda':
                 th.cuda.empty_cache()
+
+            
+    def save_model(self,best_acc,current_acc,epoch):
+        '''
+        我的保存逻辑 只保留历史最高分 继续训练也是在最高分的基础上
+        '''
+        if current_acc>best_acc:
+            checkpoint={
+                'epoch':epoch,
+                'model':self.model.state_dict(),
+                'optimizer':self.optimizer.state_dict(),
+                'lr_sche':self.lr_sche.state_dict(),
+                'best_acc':best_acc}
+            th.save(checkpoint,self.save_path/f"{cfg['model']['name']}_best.pt")
+
+            best_acc=current_acc
+        return best_acc
+    
+    def load_model(self):
+
+        load_path = self.save_path / f"{cfg['model']['name']}_best.pt"
+        if load_path.exists():
+            checkpoint = th.load(load_path, map_location=self.device)
+            self.model.load_state_dict(checkpoint['model'])
+            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.lr_sche.load_state_dict(checkpoint['lr_sche'])
+            return checkpoint['epoch'] + 1, checkpoint['best_acc']
+        else:
+            return 0, 0.0
 
 
 def main():

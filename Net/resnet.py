@@ -43,7 +43,15 @@ class Resnet(nn.Module):
                 init_chanle *= 2
 
         self.layers = nn.Sequential(*layers)
+        self.drop_out=nn.Dropout(0.3)
         self.fc = nn.Linear(init_chanle, num_class)
+
+        for m in self.modules():
+            if isinstance(m,nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight,mode='fan_out',nonlinearity='relu')
+            elif isinstance(m,nn.BatchNorm2d):
+                nn.init.constant_(m.weight,1)
+                nn.init.constant_(m.bias,0)
 
     def _make_layer(self, ins, ous, stride, num):
 
@@ -67,11 +75,17 @@ class Resnet(nn.Module):
         x = self.layers(x)
         x = f.adaptive_avg_pool2d(x, (1, 1))
         x = x.view(x.size(0), -1)
+        x=self.drop_out(x)
 
         return self.fc(x)
 
 #blocks [2,2,2,2] resnet18
 #blocks [3,4,6,3] resnet34
+if __name__ == '__main__':
+    
+    net=Resnet(10)
+    
+
 
 
 

@@ -9,9 +9,9 @@ paths:
 # 基础训练配置
 train:
     epochs: 100               # 训练总轮数
-    learning_rate: 0.01      # 学习率
+    learning_rate: 0.001      # 学习率
     optimizer: "adam"         # 优化器类型: adam, sgd
-    device: 'mps'             # mps cpu cuda
+    device: 'cuda'             # mps cpu cuda
                 
 
 dataset:
@@ -25,7 +25,7 @@ dataset:
 
 # 模型相关参数
 model:
-    name: "DenseNet"            # 可选: ResNet, DenseNet
+    name: "ResNet"            # 可选: ResNet, DenseNet
     num_classes: 10           # 动物类别数量
   # pretrained: true          # 是否使用预训练模型
 
