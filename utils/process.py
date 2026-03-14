@@ -26,7 +26,7 @@ val_forms = transforms.Compose([
 
     transforms.ToTensor(),
     transforms.Normalize(mean=process_cfg.normalize['mean'],
-                         std=process_cfg.normalize['std'])])
+                        std=process_cfg.normalize['std'])])
 
 
 class MakeLoader:

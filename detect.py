@@ -1,45 +1,61 @@
-import cv2
-import torch as th
-from torch.nn import functional
-from train import Factory
-from utils.process import val_forms
-# from utils import cfg
-from config.Config import model_cfg, path_cfg
 from pathlib import Path
-
-device = 'mps' if th.backends.mps.is_available() else 'cuda'
-
-
-# cfg_model=cfg['model'
-net = Factory.create_model(model_cfg)
-path = Path(path_cfg.checkpoint)/f"{model_cfg.name}_best.pt"
-check = th.load(path, map_location='cpu')
-net.load_state_dict(check['model'])
-net.eval()
-class_names = check['class_information']
+import inspect
+import Net
+import torch as th
+from torch import nn 
+import cv2
+from config.Config import path_cfg,model_cfg,get_device
+from utils.process import val_forms
+from torch.nn import functional as f
 
 
-def detect_one_img(img_path):
-    img = cv2.imread(img_path)
-    if img is None:
-        raise IOError('无法读取照片')
-
-    img2 = val_forms(img[:, :, ::-1])
-
-    with th.no_grad():
-        output = net(img2[None, ...])
-    proba = functional.softmax(output, dim=1)
-
-    pred_class = th.argmax(proba, dim=1)
-    print(pred_class)
-    text = class_names[pred_class.item()]
-
-    # BGR 格式：(0, 0, 255) 是红色，(0, 255, 0) 是绿色
-    ims = cv2.putText(img, text, (50, 50),
-                      cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 2)
-
-    cv2.imshow('img', ims)
-    cv2.waitKey(0)
+class Detect:
+    def __init__(self,device='cpu'):
+        
+        self.device=get_device(device)
 
 
-detect_one_img(r'imgs/train/chicken/6.jpeg')
+    def get_net(self,name: str):
+
+        classes = inspect.getmembers(Net, inspect.isclass)
+        funs = inspect.getmembers(Net, inspect.isfunction)
+        call_able = dict(classes+funs)
+        all_net = {name: model for (name, model) in call_able.items()}
+        num_class = model_cfg.num_classes
+        net: nn.Module = all_net[name](num_class)
+        check_path = path_cfg.checkpoint/f"{name}_best.pt"
+        check = th.load(check_path, map_location=self.device)
+        weight = check['model']
+        net.load_state_dict(weight)
+        class_information = check['class_information']
+        
+        self.net=net
+        self.information=class_information
+
+    @th.no_grad()
+    def run(self,img_path):
+
+        img=cv2.imread(img_path)
+        if img is not None:
+            img_tensor=val_forms(img[:,:,::-1])
+            img_tensor=img_tensor.to(self.device) #type: ignore
+            output=self.net(img_tensor[None,...])
+            proba=f.softmax(output,dim=1)
+            idx=th.argmax(proba,dim=1).item()
+            text=self.information[idx]
+            h,w=img.shape[:2]
+            cv2.putText(img,text,(w//4,h//2),fontFace=cv2.FONT_HERSHEY_COMPLEX,
+                    fontScale=0.8,color=(0,255,0),thickness=2)
+            cv2.imshow('img',img)
+            cv2.waitKey(0)
+
+
+def main():
+
+    detect=Detect('cpu')
+    detect.get_net("PretrainedDensenet121")
+
+    detect.run(r'imgs\train\chicken\17.jpeg')
+
+if __name__ == '__main__':
+    main()
