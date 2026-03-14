@@ -3,7 +3,9 @@ from abc import ABC, abstractmethod
 import torch as th
 from torch import nn
 from collections import deque
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from utils.factory import Factory
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler
 
 ALL_STRATEGY: dict[str, type["FineTuning"]] = {}
 
@@ -19,25 +21,31 @@ class FineTuning(ABC):
     def __init__(self, net: Module,
                  head_lr: float,
                  backbone_lr: float,
-                 optim_name: str):
+                 optim_name: str,
+                 lrsche_name: str):
 
         self.net = net
         self.head_lr = head_lr
         self.backbone_lr = backbone_lr
         self._unfrozen = False
         self.optim_name = optim_name
+        self.lrsche_name = lrsche_name
 
     @abstractmethod
-    def step(self, epoch, acc, optimizer) -> tuple:
+    def step(self, epoch, acc, optimizer) -> tuple[Optimizer,LRScheduler|None]:
         ...
 
     def _do_something(self):
 
         self._unfreeze_all()
         optimizer = self._rebuild_optim()
-        sche = CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2)
+        sche = Factory.create_lrsche(self.lrsche_name, optimizer)
+
         self._unfrozen = True
-        print('启用全量微调')
+        opt_name = optimizer.__class__.__name__
+        sche_name = sche.__class__.__name__
+        print(f'{opt_name}-{sche_name}启用全量微调')
+
         return optimizer, sche
 
     def _unfreeze_all(self):
@@ -100,7 +108,7 @@ class Acc(FineTuning):
 
 
 def create_finetune(strategy: str | None, net: Module, head_lr,
-                    backbone_lr, optim_name: str, **kwargs):
+                    backbone_lr, optimizer_name: str, lrsche_name: str, /, **kwargs)->None|FineTuning:
 
     import inspect
 
@@ -113,16 +121,16 @@ def create_finetune(strategy: str | None, net: Module, head_lr,
     param_map = params.parameters
 
     filtered = {k: kwargs[k] for k in param_map if k in kwargs}
-    return cls(net, head_lr, backbone_lr, optim_name, **filtered)
+    return cls(net, head_lr, backbone_lr, optimizer_name, lrsche_name, **filtered)
 
 
 if __name__ == '__main__':
 
     net = nn.Linear(512, 10)
     test_epoch = create_finetune(
-        'epoch', net, 1e-4, 1e-5, 'sgd', maxlen=15, s=20, epoch=15)
+        'epoch', net, 1e-4, 1e-5, 'sgd', 'cosin', maxlen=15, s=20, epoch=15)
     test_acc = create_finetune(
-        'acc', net, 1e-4, 1e-5, 'sgd', maxlen=15, s=20, epoch=15)
+        'acc', net, 1e-4, 1e-5, 'sgd', 'reduce', maxlen=15, s=20, epoch=15)
 
     print(test_epoch.__dict__)
     print(test_acc.__dict__)

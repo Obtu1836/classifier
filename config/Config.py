@@ -52,9 +52,10 @@ def get_device(mode: str) -> str:
 class TrainCfg:
     epochs: int
     learning_rate: float
-    optimizer: str
+    optimizer_name: str
     device: str
     resume: bool
+    lrsche_name: str
 
     def __post_init__(self):
         final_device = get_device(self.device)
@@ -90,9 +91,10 @@ process_cfg = Preprocessing(cfg['preprocessing']['shape'],
 
 train_cfg = TrainCfg(cfg['train']['epochs'],
                      cfg['train']['learning_rate'],
-                     cfg['train']['optimizer'],
+                     cfg['train']['optimizer_name'],
                      cfg['train']['device'],
                      cfg['train']['resume'],
+                     cfg['train']['lrsche_name']
                      )
 
 model_cfg = ModelCfg(cfg['model']['name'],
