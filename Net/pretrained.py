@@ -3,7 +3,7 @@ from torch import nn
 import torch as th
 
 
-def PretrainedResnet18(num_classes):
+def PretrainedResnet18(num_classes: int) -> nn.Module:
 
     model = resnet18(weights=ResNet18_Weights.DEFAULT)
     for param in model.parameters():
@@ -14,7 +14,7 @@ def PretrainedResnet18(num_classes):
     return model
 
 
-def PretrainedDensenet121(num_classes):
+def PretrainedDensenet121(num_classes: int) -> nn.Module:
     model = densenet121(weights=DenseNet121_Weights.DEFAULT)
     for param in model.parameters():
         param.requires_grad = False

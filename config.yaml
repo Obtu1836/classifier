@@ -8,7 +8,7 @@ paths:
 # 基础训练配置
 train:
     epochs: 120               # 训练总轮数
-    learning_rate: 0.1      # 学习率
+    learning_rate: 0.01      # 学习率
     optimizer_name: "sgd"         # 优化器类型: adam, sgd
     device: 'mps'             # mps cpu cuda
     resume: False            
