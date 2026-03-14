@@ -22,7 +22,7 @@ class Residual(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self,num_classes,layer_nums=[3,4,6,4]):
+    def __init__(self,num_classes,layer_nums=[2,2,2,2]):
         super().__init__()
 
         init_chanle = 64
@@ -43,7 +43,7 @@ class ResNet(nn.Module):
                 init_chanle *= 2
 
         self.layers = nn.Sequential(*layers)
-        self.drop_out=nn.Dropout(0.3)
+        self.drop_out=nn.Dropout(0.5)
         self.fc = nn.Linear(init_chanle, num_classes)
 
         for m in self.modules():
