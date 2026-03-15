@@ -85,9 +85,9 @@ dataset_cfg = DatasetCfg(cfg['dataset']['dataloaderparams'],
                          cfg['dataset']['use_sampling_weight'],
                          cfg['dataset']['use_loss_weight'])
 
-process_cfg = Preprocessing(cfg['preprocessing']['shape'],
-                            cfg['preprocessing']['use_letter'],
-                            cfg['preprocessing']['normalize'])
+process_cfg = Preprocessing(shape=cfg['preprocessing']['shape'],
+                            use_letter=cfg['preprocessing']['use_letter'],
+                            normalize=cfg['preprocessing']['normalize'])
 
 train_cfg = TrainCfg(cfg['train']['epochs'],
                      cfg['train']['learning_rate'],
