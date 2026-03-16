@@ -41,43 +41,55 @@ class FineTuning(ABC):
     def _do_something(self):
 
         self._unfreeze_all()
-        optimizer = self._rebuild_optim()
-        sche = Factory.create_lrsche(self.lrsche_name, optimizer)
+        optimizer = self._rebuild_optim()#重建优化器 
+        sche = Factory.create_lrsche(self.lrsche_name, optimizer)#重建学习调度器
 
-        self._unfrozen = True
+        self._unfrozen = True#标识位 并将状态设置为 True 防止在训练循环时 重复执行新建等
         opt_name = optimizer.__class__.__name__
         sche_name = sche.__class__.__name__
         logger.success(f'{self.model_name}-{opt_name}-{sche_name[:7]}启用全量微调')
 
         return optimizer, sche
 
-    def _unfreeze_all(self):
+    def _unfreeze_all(self):# 将所有参数置为求导状态
         for param in self.net.parameters():
             param.requires_grad = True
 
     def _rebuild_optim(self):
+        
+        '''
+        通过获取分类头的层的名称 将 整个网络的参数分为2部分 分别是主干层和分类层
+        因为是在预训练的基础上 所以 需要重新建立优化器 分别对主干层和分类层设置不同
+        的较小的学习率
+        '''
+        head_name = self._get_head_name(self.net)#获取分类层
 
-        head_name = self._get_head_name(self.net)
-
-        backbone_params = [p for n, p in self.net.named_parameters()
+        backbone_params = [p for n, p in self.net.named_parameters()#筛选主干层参数
                            if head_name not in n and p.requires_grad]
 
-        head_params = [p for n, p in self.net.named_parameters()
+        head_params = [p for n, p in self.net.named_parameters()#筛选分类层参数
                        if head_name in n and p.requires_grad]
         
         params = [{'params': backbone_params, 'lr': self.backbone_lr},
                   {'params': head_params, 'lr': self.head_lr}]
 
-        if self.optim_name == 'sgd':
+        if self.optim_name == 'sgd': #重建优化器
             return th.optim.SGD(params, weight_decay=5e-4)
         return th.optim.Adam(params, weight_decay=5e-5)
 
     def _get_head_name(self, net: Module):
 
-        for name, _ in net.named_children():
+        for name, _ in net.named_children():#children 可获取整层 通过遍历 获取最后的一整个分类头
             pass
         return name
 
+'''
+下面两个 是启用全量微调的 条件 分别是通过epoch 和acc
+
+通过epoch 的方式是 设置 假如epoch=10 代表 当训练到第10个epoch时进入全量微调
+通过acc的方式是 维护一个maxlen的deque 当每一次循环时加入新的acc 当队列的均值
+等于新的acc时 说明趋于稳定 此时进入微调 
+'''
 
 @auto_add_strategy
 class Epoch(FineTuning):
@@ -127,7 +139,7 @@ def create_finetune(strategy: str | None, net: Module, model_name: str, head_lr,
 
     cls = ALL_STRATEGY[strategy]
 
-    params = inspect.signature(cls.__init__)
+    params = inspect.signature(cls.__init__)#获取目标类的初始化参数
     param_map = params.parameters
 
     filtered = {k: kwargs[k] for k in param_map if k in kwargs}

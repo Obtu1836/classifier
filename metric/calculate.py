@@ -6,7 +6,7 @@ from utils.dataload import AnimalDataLoader
 from config.Config import path_cfg, get_device, dataset_cfg, model_cfg
 from torchmetrics import (ConfusionMatrix, Accuracy,
                           Recall, Precision, F1Score, Metric)
-
+from loguru import logger
 from torchmetrics.classification import MultilabelConfusionMatrix
 
 
@@ -37,7 +37,6 @@ class CalculateMeric(Detect):
 
         val_loader, _, _ = AnimalDataLoader(
             'val', path_cfg, dataset_cfg).get_loader()
-
         return val_loader
 
     @th.no_grad()
@@ -78,11 +77,11 @@ class CalculateMeric(Detect):
     def cal_perclass_metirc(self):
         per_class = self.single_class_score.compute()
         for i, tensor in enumerate(per_class):
-            print(f'第{i+1}个类别 {self.information[i]}:')
+            logger.info(f'第{i+1}个类别 {self.information[i]}:')
             rec = (tensor[1, :]/tensor[1, :].sum())[1]
             prec = (tensor[:, 1]/tensor[:, 1].sum())[1]
-            print(f'召回率:{round(rec.item(), 3)}')
-            print(f'精确率:{round(prec.item(), 3)}')
+            logger.info(f'召回率:{round(rec.item(), 3)}')
+            logger.info(f'精确率:{round(prec.item(), 3)}')
 
 
 def main():
@@ -98,7 +97,8 @@ def main():
     recall = met.recall_score
     precision = met.precision_score
     f1 = met.f1_score
-    print(acc, recall, precision, f1)
+    logger.info(f"模型准确率：{acc},召回率: {recall},\
+                  精准度: {precision},f1_score: {f1}")
 
     met.cal_perclass_metirc()
 

@@ -52,7 +52,7 @@ preprocessing:
       std: [0.229, 0.224, 0.225]
 
 finetune:
-    strategy:      # 是否启用全参数微调: 空着为不启用， epoch表示N个epoch 意思是 N个epoch之后开启全量微调 
+    strategy: null      # 是否启用全参数微调: null为不启用， epoch表示N个epoch 意思是 N个epoch之后开启全量微调 
     backbone_lr: 0.0001   #acc 表示使用准确率 内部维护了一个maxlen的deque 意思是根据准确率经过maxlen之后没有提升 
     head_lr: 0.001       # 动态的开启全量微调 
     maxlen: 15

@@ -15,7 +15,7 @@ class Detect:
     def __init__(self, device='cpu'):
 
         self.device = get_device(device)
-        logger.success(f"{self.device}")
+        logger.info(f"{self.device}")
 
     def get_net(self, model_name: str):
 
@@ -30,6 +30,7 @@ class Detect:
         check = th.load(check_path, map_location=self.device)
         weight = check['model']
         net.load_state_dict(weight)
+        logger.success('网络模型 已经成功加载！')
         class_information = check['class_information']
 
         self.net = net
@@ -55,7 +56,7 @@ class Detect:
         return text
 
     def _readimg(self, img_path: Path) -> NDArray:
-        img = cv2.imread(img_path)
+        img = cv2.imread(str(img_path))
         if img is None:
             logger.error('照片读取错误')
             raise FileNotFoundError()
@@ -68,7 +69,7 @@ def main():
     detect.get_net("PretrainedResnet18")
     
     true,num=0,0
-    img_path = Path(r'imgs\val\butterfly')
+    img_path = Path('imgs\val\butterfly')
     for child in img_path.iterdir():
         text=detect.detect_single_img(child,10)
         if text==img_path.name:
