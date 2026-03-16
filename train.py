@@ -3,7 +3,7 @@ import wandb
 from pathlib import Path
 from torch import nn
 from torch.nn import Module
-from rich import print
+from loguru import logger
 from rich.progress import track
 from Net.unfreeze import create_finetune
 
@@ -61,7 +61,9 @@ class Trainer:
 
         avg_loss = total_loss/samples_length
         avg_acc = total_num/samples_length
-
+        lrs=[round(pg['lr'], 6) for pg in self.optimizer.param_groups]
+        name_lr = dict(zip(['backbone_lr', 'head_lr'],lrs))
+        logger.info(f'当前学习率{name_lr}')
         return avg_loss, avg_acc
 
     @th.no_grad()
@@ -155,6 +157,7 @@ class Trainer:
         finetune = create_finetune(
             kwargs.get('strategy'),
             self.model,
+            self.model_name,
             kwargs.get('head_lr', 1e-4),
             kwargs.get('backbone_lr', 1e-5),
             kwargs.get('optimizer_name', 'adam'),
@@ -181,12 +184,12 @@ class Trainer:
             直接按配置参数重新构建一个优化器
             '''
             if is_unfrozen and finetune is not None:
-                print("检测到历史全量微调状态，重构 2 组参数优化器...")
+                logger.info("检测到历史全量微调状态，重构 2 组参数优化器...")
                 finetune._unfrozen = True         # 关键 标识
                 finetune._unfreeze_all()          # 关键！先解冻所有参数
                 self.optimizer = finetune._rebuild_optim()  # 再重构优化器
             else:
-                print("检测到历史单组参数状态，重构单组优化器...")
+                logger.info("检测到历史单组参数状态，重构单组优化器...")
                 # 使用 Factory 重新创建一个干净的、只有 1 组参数的优化器
                 #如果只有一个参数组 那就按照配置文件重新创建一个新的优化器
                 self.optimizer = Factory.create_optimizer(
@@ -203,19 +206,19 @@ class Trainer:
 
         for i_epoch in range(start_epoch, epochs):
 
-            print(f"第{i_epoch+1}/{epochs}轮训练...")
+            logger.info(f"第{i_epoch+1}/{epochs}轮训练...")
 
             train_loss, train_acc = self._train_epoch(train_loader)
-            print(f"{"train_loss":<15}: {train_loss:.4f}")
-            print(f"{"train_acc":<15}: {train_acc:.4f}")
+            logger.info(f"{"train_loss":<15}: {train_loss:.4f}")
+            logger.info(f"{"train_acc":<15}: {train_acc:.4f}")
             wandb.log({'epoch': i_epoch,
                        'train_loss': train_loss,
                        'train_acc': train_acc})
 
             val_loss, val_acc, wrong_imgs = self._evaluate_epoch(
                 val_loader, class_information)
-            print(f"{"val_loss":<15}: {val_loss:.4f}")
-            print(f"{"val_acc":<15}: {val_acc:.4f}")
+            logger.info(f"{"val_loss":<15}: {val_loss:.4f}")
+            logger.info(f"{"val_acc":<15}: {val_acc:.4f}")
             wandb.log({'epoch': i_epoch,
                        'val_loss': val_loss, 'val_acc': val_acc,
                        'mis_img': wrong_imgs})
@@ -224,16 +227,19 @@ class Trainer:
                 best_acc, val_acc, i_epoch, class_information)
 
             if finetune is not None:
+            # if finetune is not None and checkpoint is not None:
                 # 获取 step 的返回值
                 '''
+                加入checkpoint的判断是杜绝 在没有模型文件的情况下 开启了resume模式 并且设置了微调的模式
+
                 step返回值tuple[Optimizer,None|LRScheduler]
                 当config参数不要求使用微调或者当使用微调 指标(epoch|acc)
                 没满足时 返回tuple[Optimizer,None]返回传入的优化器 因为
                 优化器状态没变 所以学习率调度器也不会变化 所以是None
                 当config开启微调且指标满足时 会建立新的优化器和学习率调度器
                 返回新的优化器和新的学习率调度器
-                如果学习率调度器状态发生变化 (None就是没变化,LRScheduler就说明发生了变化)
-                    重新赋值
+                如果学习率调度器状态发生变化 (如果是None 说明没变化,如果是.LRScheduler就说明发生了变化)
+                重新赋值
                 '''
                 new_optim, new_sche = finetune.step(
                     i_epoch, val_acc, self.optimizer)
@@ -281,6 +287,7 @@ class Trainer:
 
         load_path = self.save_path / f"{self.model_name}_best.pt"
         if not load_path.exists():
+            logger.error('选取的网络 没有找到存档 本次训练将从0开始 可能是忘记修改resume参数了')
             return 0, 0.0, False, None
 
         checkpoint = th.load(load_path, map_location=self.device)
@@ -324,6 +331,6 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[bold red]训练已手动终止[/bold red]")
+        logger.success("\n[bold red]训练已手动终止[/bold red]")
     finally:
         wandb.finish()

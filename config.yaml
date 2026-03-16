@@ -1,4 +1,7 @@
 #路径
+
+#YAML 只支持列表（sequence）、字典（mapping）、字符串、数字 布尔等基本类型
+#使用科学计数法表示小数时 需要e前面用浮点数表示
 paths:
     train_dir: "./imgs/train"
     val_dir: "./imgs/val"
@@ -8,16 +11,27 @@ paths:
 # 基础训练配置
 train:
     epochs: 120               # 训练总轮数
-    learning_rate: 0.01      # 学习率
     optimizer_name: "sgd"         # 优化器类型: adam, sgd
     device: 'mps'             # mps cpu cuda
     resume: False            
-    lrsche_name: 'reduce'       # cosin ,reduce         
+    lrsche_name: 'reduce'       # cosin ,reduce      
+    label_smoothing: 0.1
+
+    sgd:
+        lr: 0.03
+        momentum: 0.9
+        weight_decay: 0.0001
+
+    adam:
+        lr: 0.01
+        betas: [0.9,0.999]
+        weight_decay: 1.0e-4    # 浮点数表示
+
                               
 dataset:
     dataloaderparams:
         batch_size: 64           # 每批训练样本数
-        num_workers: 4            # 多进程
+        num_workers: 8            # 多进程
 # 下面两个权重设置 可以都为False 对于较轻的类别不均衡 采样设置True,loss设置False
 # 对于严重的类别不均衡 采样设置为False,loss设置为True  loss为true时 会覆盖sampling
     use_sampling_weight: True             # 是否权重采样 (训练时)
@@ -25,7 +39,7 @@ dataset:
 
 # 模型相关参数
 model:
-    name: "PretrainedDensenet121"            # 可选: ResNet, DenseNet ,PretrainedResnet18,PretrainedDensenet121
+    name: "DenseNet"            # 可选: ResNet, DenseNet ,PretrainedResnet18,PretrainedDensenet121
     num_classes: 10         # 动物类别数量
     
 
@@ -38,9 +52,9 @@ preprocessing:
       std: [0.229, 0.224, 0.225]
 
 finetune:
-    strategy: "epoch"          # 是否启用全参数微调: None epoch acc
-    head_lr: 0.001
-    backbone_lr: 0.00001
+    strategy:      # 是否启用全参数微调: 空着为不启用， epoch表示N个epoch 意思是 N个epoch之后开启全量微调 
+    backbone_lr: 0.0001   #acc 表示使用准确率 内部维护了一个maxlen的deque 意思是根据准确率经过maxlen之后没有提升 
+    head_lr: 0.001       # 动态的开启全量微调 
     maxlen: 15
     epoch: 2
 

@@ -9,12 +9,13 @@ from typing import cast
 from torch.nn import functional as f
 from config.Config import path_cfg, model_cfg, get_device
 from utils.process import val_forms
-
+from loguru import logger
 
 class Detect:
     def __init__(self, device='cpu'):
 
         self.device = get_device(device)
+        logger.success(f"{self.device}")
 
     def get_net(self, model_name: str):
 
@@ -37,9 +38,9 @@ class Detect:
         self.information = class_information
 
     @th.no_grad()
-    def run(self, img_path: Path):
+    def detect_single_img(self, img_path: Path,time=0):
 
-        img = self.save_readimg(img_path)
+        img = self._readimg(img_path)
         img_tensor = cast(th.Tensor, val_forms(img[:, :, ::-1]))
         img_tensor = img_tensor.to(self.device)
         output = self.net(img_tensor[None, ...])
@@ -50,24 +51,30 @@ class Detect:
         cv2.putText(img, text, (w//4, h//2), fontFace=cv2.FONT_HERSHEY_COMPLEX,
                     fontScale=0.8, color=(0, 255, 0), thickness=2)
         cv2.imshow('img', img)
-        cv2.waitKey(0)
+        cv2.waitKey(time)
+        return text
 
-    def save_readimg(self, img_path: Path) -> NDArray:
+    def _readimg(self, img_path: Path) -> NDArray:
         img = cv2.imread(img_path)
         if img is None:
-            raise FileNotFoundError('图片无法读取')
+            logger.error('照片读取错误')
+            raise FileNotFoundError()
         return img
 
 
 def main():
 
-    detect = Detect('mps')
-    detect.get_net("PretrainedDensenet121")
-
-    img_path = Path(
-        r'imgs/val/sheep/e13cb60a2bfc1c22d2524518b7444f92e37fe5d404b0144390f8c078a1ebb2_640.jpg')
-
-    detect.run(img_path)
+    detect = Detect('cuda')
+    detect.get_net("PretrainedResnet18")
+    
+    true,num=0,0
+    img_path = Path(r'imgs\val\butterfly')
+    for child in img_path.iterdir():
+        text=detect.detect_single_img(child,10)
+        if text==img_path.name:
+            true+=1
+        num+=1
+    print(true/num)
 
 
 if __name__ == '__main__':

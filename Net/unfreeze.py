@@ -5,6 +5,7 @@ from torch import nn
 from collections import deque
 from utils.factory import Factory
 from torch.optim import Optimizer
+from loguru import logger
 from torch.optim.lr_scheduler import LRScheduler
 
 ALL_STRATEGY: dict[str, type["FineTuning"]] = {}
@@ -19,12 +20,14 @@ def auto_add_strategy(cls):
 class FineTuning(ABC):
 
     def __init__(self, net: Module,
+                 model_name:str,
                  head_lr: float,
                  backbone_lr: float,
                  optim_name: str,
                  lrsche_name: str):
 
         self.net = net
+        self.model_name=model_name
         self.head_lr = head_lr
         self.backbone_lr = backbone_lr
         self._unfrozen = False
@@ -44,7 +47,7 @@ class FineTuning(ABC):
         self._unfrozen = True
         opt_name = optimizer.__class__.__name__
         sche_name = sche.__class__.__name__
-        print(f'{opt_name}-{sche_name}启用全量微调')
+        logger.success(f'{self.model_name}-{opt_name}-{sche_name[:7]}启用全量微调')
 
         return optimizer, sche
 
@@ -58,8 +61,10 @@ class FineTuning(ABC):
 
         backbone_params = [p for n, p in self.net.named_parameters()
                            if head_name not in n and p.requires_grad]
+
         head_params = [p for n, p in self.net.named_parameters()
                        if head_name in n and p.requires_grad]
+        
         params = [{'params': backbone_params, 'lr': self.backbone_lr},
                   {'params': head_params, 'lr': self.head_lr}]
 
@@ -107,12 +112,17 @@ class Acc(FineTuning):
         return optimizer, None
 
 
-def create_finetune(strategy: str | None, net: Module, head_lr,
+def create_finetune(strategy: str | None, net: Module, model_name: str, head_lr,
                     backbone_lr, optimizer_name: str, lrsche_name: str, /, **kwargs)->None|FineTuning:
 
     import inspect
 
     if strategy is None:
+        return None
+    
+    
+    if "Pretrained" not in model_name:
+        logger.error('检测到 非预训练模型 使用了 全量微调 建议修改 strategy为 None或者不写')
         return None
 
     cls = ALL_STRATEGY[strategy]
@@ -121,16 +131,16 @@ def create_finetune(strategy: str | None, net: Module, head_lr,
     param_map = params.parameters
 
     filtered = {k: kwargs[k] for k in param_map if k in kwargs}
-    return cls(net, head_lr, backbone_lr, optimizer_name, lrsche_name, **filtered)
+    return cls(net, model_name,head_lr, backbone_lr, optimizer_name, lrsche_name, **filtered)
 
 
 if __name__ == '__main__':
 
     net = nn.Linear(512, 10)
     test_epoch = create_finetune(
-        'epoch', net, 1e-4, 1e-5, 'sgd', 'cosin', maxlen=15, s=20, epoch=15)
+        'epoch', net, 'Pretrainedresnet', 1e-4, 1e-5, 'sgd', 'cosin', maxlen=15, s=20, epoch=15)
     test_acc = create_finetune(
-        'acc', net, 1e-4, 1e-5, 'sgd', 'reduce', maxlen=15, s=20, epoch=15)
+        'acc', net, 'Pretrainedresnet', 1e-4, 1e-5, 'sgd', 'reduce', maxlen=15, s=20, epoch=15)
 
     print(test_epoch.__dict__)
     print(test_acc.__dict__)
