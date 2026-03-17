@@ -4,10 +4,15 @@ from detect import Detect
 
 from utils.dataload import AnimalDataLoader
 from config.Config import path_cfg, get_device, dataset_cfg, model_cfg
+
 from torchmetrics import (ConfusionMatrix, Accuracy,
-                          Recall, Precision, F1Score, Metric)
+                          Recall, Precision, F1Score, Metric,
+                          PrecisionRecallCurve, AveragePrecision,
+                          ROC, AUROC)
 from loguru import logger
 from torchmetrics.classification import MultilabelConfusionMatrix
+
+import matplotlib.pyplot as plt
 
 
 class CalculateMeric(Detect):
@@ -28,6 +33,15 @@ class CalculateMeric(Detect):
         self.single_class_score = MultilabelConfusionMatrix(
             num_labels=num_class).to(device)
 
+        self.pr_probas = PrecisionRecallCurve(
+            task='multiclass', num_classes=num_class).to(device)
+        self.ap_probas = AveragePrecision(
+            'multiclass', num_classes=num_class, average='none').to(device)
+        self.roc_probas = ROC(
+            task='multiclass', num_classes=num_class).to(device)
+        self.auc_probas = AUROC(
+            'multiclass', num_classes=num_class, average='none').to(device)
+
         self._init_attrs = [(k, v) for k, v in vars(
             self).items() if isinstance(v, Metric)]
 
@@ -44,6 +58,7 @@ class CalculateMeric(Detect):
         for tensor, label in val_load:
             tensor, label = tensor.to(self.device), label.to(self.device)
             output = self.net(tensor)
+            output = f.softmax(output, dim=1)
             pred = th.argmax(output, dim=1)
 
             for name, cls in self._init_attrs:
@@ -51,6 +66,8 @@ class CalculateMeric(Detect):
                     l_pred = f.one_hot(pred, self.num_class)
                     l_label = f.one_hot(label, self.num_class)
                     cls.update(l_pred, l_label)
+                elif 'probas' in name:
+                    cls.update(output, label)
                 else:
                     cls.update(pred, label)
 
@@ -83,6 +100,48 @@ class CalculateMeric(Detect):
             logger.info(f'召回率:{round(rec.item(), 3)}')
             logger.info(f'精确率:{round(prec.item(), 3)}')
 
+    def cal_pr_roc(self):
+        precision, recall, _ = self.pr_probas.compute()
+        aps = self.ap_probas.compute()
+        fpr, tpr, _ = self.roc_probas.compute()
+        aucs = self.auc_probas.compute()
+
+        paint = Paint(self.information)
+        pr_data = [recall, precision, aps]
+        roc_data = [fpr, tpr, aucs]
+
+        paint.draw(pr_data, roc_data)
+
+
+class Paint:
+    def __init__(self, class_information):
+
+        self.class_information = class_information
+        self.fig, self.ax = plt.subplots(1, 2, sharey=True, figsize=(12, 4),)
+
+    def draw(self, pr: list[th.Tensor], roc: list[th.Tensor]):
+
+        length = len(pr[2])
+
+        for i in range(length):
+            information = self.class_information[i]
+            pr_label = information+" "+str(pr[2][i].cpu().numpy().round(3))
+            self.ax[0].plot(pr[0][i].cpu().numpy(), pr[1]
+                            [i].cpu().numpy(), label=pr_label)
+            roc_label = information+" "+str(roc[2][i].cpu().numpy().round(3))
+            self.ax[1].plot(roc[0][i].cpu().numpy(), roc[1]
+                            [i].cpu().numpy(), label=roc_label)
+
+        self.ax[0].set_xlabel('recall')
+        self.ax[0].set_ylabel('precision')
+        self.ax[0].legend(loc='best')
+
+        self.ax[1].set_xlabel('fpr')
+        self.ax[1].set_ylabel('tpr')
+        self.ax[1].legend(loc='best')
+
+        plt.show()
+
 
 def main():
 
@@ -101,6 +160,7 @@ def main():
                   精准度: {precision},f1_score: {f1}")
 
     met.cal_perclass_metirc()
+    met.cal_pr_roc()
 
 
 if __name__ == '__main__':

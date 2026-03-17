@@ -64,10 +64,13 @@
 ### 1. 安装环境
 确保你已安装 Python 3.12+
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt.
 ```
+### 2. 注册 wandb
+在官网注册 wandb账号 获取api_key 然后 在项目中 新建一个脚本 执行 wandb.login()
+如果不需要wandb 也可以把代码中所有带wandb的代码注释掉
 
-### 2. 准备数据
+### 3. 准备数据
 将图片按照类别存放在 `imgs/train` 和 `imgs/val` 目录下：
 ```text
 imgs
@@ -79,18 +82,18 @@ imgs
         dog/
 ```
 
-### 3. 开始训练
+### 4. 开始训练
 调整好 `config.yaml` 后，直接运行：
 ```bash
 python train.py
 ```
 
-### 4. 推理检测
+### 5. 推理检测
 ```bash
 python detect.py
 ```
 
-### 5. 指标分析
+### 6. 指标分析
 ```bash
 python -m metric.calculate
 
